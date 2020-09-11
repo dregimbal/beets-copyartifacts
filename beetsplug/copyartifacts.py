@@ -1,17 +1,18 @@
+import filecmp
 import os
 import sys
-import filecmp
 
 import beets.util
 from beets import config
-from beets.ui import get_path_formats
+from beets.library import DefaultTemplateFunctions
 from beets.mediafile import TYPES
 from beets.plugins import BeetsPlugin
-from beets.library import DefaultTemplateFunctions
+from beets.ui import get_path_formats
 from beets.util.functemplate import Template
 
-__version__ = '0.1.2'
+__version__ = '0.1.3'
 __author__ = 'Sami Barakat <sami@sbarakat.co.uk>'
+
 
 class CopyArtifactsPlugin(BeetsPlugin):
     def __init__(self):
@@ -28,11 +29,41 @@ class CopyArtifactsPlugin(BeetsPlugin):
         self.extensions = self.config['extensions'].as_str_seq()
         self.print_ignored = self.config['print_ignored'].get()
 
-        self.path_formats = [c for c in beets.ui.get_path_formats() if c[0][:4] == u'ext:']
+        self.path_formats = [
+            c for c in beets.ui.get_path_formats() if c[0][:4] == u'ext:']
 
+        self.register_listener('item_moved', self.find_lyrics)
         self.register_listener('item_moved', self.collect_artifacts)
         self.register_listener('item_copied', self.collect_artifacts)
         self.register_listener('cli_exit', self.process_events)
+
+    def find_lyrics(self, item, source, destination):
+        source_path = os.path.dirname(source)
+        dest_path = os.path.dirname(destination)
+
+        # Get the filename only from the initial file path.
+        musicfilename = os.path.basename(source)
+        musicbasename = os.path.splitext(musicfilename)[0]
+
+        destmusicfilename = os.path.basename(destination)
+        destmusicbasename = os.path.splitext(destmusicfilename)[0]
+
+        # self._log.info(u'Will move the lyrics to: {0}', destmusicbasename)
+        for root, dirs, files in beets.util.sorted_walk(
+                source_path, ignore=config['ignore'].as_str_seq()):
+            for filename in files:
+                lyric_file = os.path.join(root, filename)
+                (basefilename, ext) = os.path.splitext(filename)
+                if basefilename == musicbasename:
+                    if ext == b".lrc":
+                        self._log.info(u'Lyrics file found!: {0}', filename)
+                        dest_file_name = destmusicbasename + b'.lrc'
+                        dest_file_path = os.path.join(
+                            dest_path, dest_file_name)
+                        # self._log.info(u'Moving from: {0}'.format(os.path.basename(lyric_file.decode('utf8'))))
+                        # self._log.info(u'Moving to: {0}'.format(os.path.basename(dest_file_path.decode('utf8'))))
+                        beets.util.move(lyric_file, dest_file_path)
+                        return
 
     def _destination(self, filename, mapping):
         '''Returns a destination path a file should be moved to. The filename
@@ -61,7 +92,8 @@ class CopyArtifactsPlugin(BeetsPlugin):
 
         # Get template funcs and evaluate against mapping
         funcs = DefaultTemplateFunctions().functions()
-        file_path = subpath_tmpl.substitute(mapping, funcs) + file_ext.decode('utf8')
+        file_path = subpath_tmpl.substitute(
+            mapping, funcs) + file_ext.decode('utf8')
 
         # Sanitize filename
         filename = beets.util.sanitize_path(os.path.basename(file_path))
@@ -105,7 +137,7 @@ class CopyArtifactsPlugin(BeetsPlugin):
 
         non_handled_files = []
         for root, dirs, files in beets.util.sorted_walk(
-                    source_path, ignore=config['ignore'].as_str_seq()):
+                source_path, ignore=config['ignore'].as_str_seq()):
             for filename in files:
                 source_file = os.path.join(root, filename)
 
@@ -148,13 +180,13 @@ class CopyArtifactsPlugin(BeetsPlugin):
             # Skip extensions not handled by plugin
             file_ext = os.path.splitext(filename)[1]
             if ('.*' not in self.extensions
-                and file_ext.decode('utf8') not in self.extensions):
+                    and file_ext.decode('utf8') not in self.extensions):
                 ignored_files.append(source_file)
                 continue
 
             # Skip file if it already exists in dest
             if (os.path.exists(dest_file)
-                and filecmp.cmp(source_file, dest_file)):
+                    and filecmp.cmp(source_file, dest_file)):
                 ignored_files.append(source_file)
                 continue
 
@@ -176,14 +208,14 @@ class CopyArtifactsPlugin(BeetsPlugin):
                     # A normal import, just copy
                     self._copy_artifact(source_file, dest_file)
 
-
         if self.print_ignored and ignored_files:
             self._log.warning(u'Ignored files:')
             for f in ignored_files:
                 self._log.warning('   {0}', os.path.basename(f))
 
     def _copy_artifact(self, source_file, dest_file):
-        self._log.info(u'Copying artifact: {0}'.format(os.path.basename(dest_file.decode('utf8'))))
+        self._log.info(u'Copying artifact: {0}'.format(
+            os.path.basename(dest_file.decode('utf8'))))
         beets.util.copy(source_file, dest_file)
 
     def _move_artifact(self, source_file, dest_file):
@@ -191,9 +223,9 @@ class CopyArtifactsPlugin(BeetsPlugin):
             # Sanity check for other plugins moving files
             return
 
-        self._log.info(u'Moving artifact: {0}'.format(os.path.basename(dest_file.decode('utf8'))))
+        self._log.info(u'Moving artifact: {0}'.format(
+            os.path.basename(dest_file.decode('utf8'))))
         beets.util.move(source_file, dest_file)
 
         dir_path = os.path.split(source_file)[0]
         beets.util.prune_dirs(dir_path, clutter=config['clutter'].as_str_seq())
-
