@@ -10,7 +10,7 @@ from beets.plugins import BeetsPlugin
 from beets.ui import get_path_formats
 from beets.util.functemplate import Template
 
-__version__ = '0.1.2'
+__version__ = '0.1.3'
 __author__ = 'Sami Barakat <sami@sbarakat.co.uk>'
 
 
@@ -32,9 +32,38 @@ class CopyArtifactsPlugin(BeetsPlugin):
         self.path_formats = [
             c for c in beets.ui.get_path_formats() if c[0][:4] == u'ext:']
 
+        self.register_listener('item_moved', self.find_lyrics)
         self.register_listener('item_moved', self.collect_artifacts)
         self.register_listener('item_copied', self.collect_artifacts)
         self.register_listener('cli_exit', self.process_events)
+
+    def find_lyrics(self, item, source, destination):
+        source_path = os.path.dirname(source)
+        dest_path = os.path.dirname(destination)
+
+        # Get the filename only from the initial file path.
+        musicfilename = os.path.basename(source)
+        musicbasename = os.path.splitext(musicfilename)[0]
+
+        destmusicfilename = os.path.basename(destination)
+        destmusicbasename = os.path.splitext(destmusicfilename)[0]
+
+        # self._log.info(u'Will move the lyrics to: {0}', destmusicbasename)
+        for root, dirs, files in beets.util.sorted_walk(
+                source_path, ignore=config['ignore'].as_str_seq()):
+            for filename in files:
+                lyric_file = os.path.join(root, filename)
+                (basefilename, ext) = os.path.splitext(filename)
+                if basefilename == musicbasename:
+                    if ext == b".lrc":
+                        self._log.info(u'Lyrics file found!: {0}', filename)
+                        dest_file_name = destmusicbasename + b'.lrc'
+                        dest_file_path = os.path.join(
+                            dest_path, dest_file_name)
+                        # self._log.info(u'Moving from: {0}'.format(os.path.basename(lyric_file.decode('utf8'))))
+                        # self._log.info(u'Moving to: {0}'.format(os.path.basename(dest_file_path.decode('utf8'))))
+                        beets.util.move(lyric_file, dest_file_path)
+                        return
 
     def _destination(self, filename, mapping):
         '''Returns a destination path a file should be moved to. The filename
