@@ -5,10 +5,10 @@ import sys
 import beets.util
 from beets import config
 from beets.library import DefaultTemplateFunctions
-from beets.mediafile import TYPES
 from beets.plugins import BeetsPlugin
 from beets.ui import get_path_formats
 from beets.util.functemplate import Template
+from mediafile import TYPES
 
 __version__ = '0.1.3'
 __author__ = 'Sami Barakat <sami@sbarakat.co.uk>'
